@@ -33,21 +33,157 @@ function loadimg(url) {
 	return img;
 }
 
+function dist(dx, dy) {
+	return Math.sqrt(dx*dx + dy*dy);
+}
+
 function FakeAudio() {
 	this.play = function() {
-		console.log("playing");
 	};
 }
 
+
+//-----------------------------------------------------------------
+//
+var CLOUD_WIDTH = 40;
+var CLOUD_HWIDTH = CLOUD_WIDTH / 2;
+var CLOUD_HEIGHT = 30;
+var CLOUD_HHEIGHT = CLOUD_HEIGHT / 2;
+var CLOUD_MIN_RADIUS = 5;
+var CLOUD_RADIUS = 15;
+var CLOUD_COLOR_VARIANCE = 8;
+var CLOUD_COLOR_RANGE = 60;
+var CLOUD_MIN_SPEED = 5;
+var CLOUD_SPEED = 20;
+var CLOUD_SIZE = 2;
+var CLOUD_MIN_SIZE = 2;
+var CLOUD_LIGHTNING_LENGTH = 1.2; //secs
+var CLOUD_LIGHTNING_DIST = 300; //pix
+
+function Cloud() {
+	this.rand();
+}
+
+Cloud.prototype.bbWidth = function() {
+	return this.s * CLOUD_WIDTH;
+}
+
+Cloud.prototype.bbHeight= function() {
+	return this.s * CLOUD_HEIGHT;
+}
+
+Cloud.prototype.rand = function() {
+	this.s = r(CLOUD_SIZE) + CLOUD_MIN_SIZE;
+	this.x = r(w + 2 * this.bbWidth()) - this.bbWidth();
+	this.y = r(h + 2 * this.bbHeight()) - this.bbHeight();
+	this.p = Array();
+	for (var i = 0; i < 5; i++) {
+		this.p[i] = {
+			x: (r(CLOUD_WIDTH) - CLOUD_HWIDTH) * this.s,
+			y: (r(CLOUD_HEIGHT) - CLOUD_HHEIGHT) * this.s,
+			r: (r(CLOUD_MIN_RADIUS) + CLOUD_RADIUS) * this.s,
+			c: r(CLOUD_COLOR_VARIANCE) 
+		};
+	}
+	this.c = r(CLOUD_COLOR_RANGE);
+	this.dx = r(CLOUD_SPEED) + CLOUD_MIN_SPEED;
+	this.t = millis();
+}
+
+Cloud.prototype.update = function() {
+	var dt = m - this.t;
+	this.t += dt; 
+	this.x += this.dx * (dt / 1000);	
+	if (this.x > w + this.bbWidth()) {
+		this.rand();
+		this.x = -this.bbWidth();
+	}
+}
+
+Cloud.prototype.draw = function(weather) {
+	for (var i = 0; i < this.p.length; i++) {
+		q = this.p[i];
+		var col = this.c + weather.c + q.c;
+		var x = this.x + q.x;
+		var y = this.y + q.y;
+
+		var intensity = 0;
+		for (var j = 0; j < weather.lightning.length; j++) {
+			var l = weather.lightning[j];
+			var lt = secs - l.t;
+			if (lt < 0) continue;
+			if (lt > CLOUD_LIGHTNING_LENGTH) continue;
+			var d = dist(x-l.x, y-l.y);
+			if (d > CLOUD_LIGHTNING_DIST) continue;
+			//intensity = Math.max(intensity, 1 - ((d/CLOUD_LIGHTNING_DIST) * (lt/CLOUD_LIGHTNING_LENGTH) * Math.sin(lt * 10 * Math.PI) * (i % 1.8)));
+			intensity = Math.max(intensity, 1 - ((d/CLOUD_LIGHTNING_DIST) * Math.sin(lt * 10 * Math.PI) * (i % 1.8)));
+		}
+		col += (0xff - col) * intensity;
+
+		col = (col << 16) | (col << 8) | (col);
+		ctx.fillStyle = "#" + zeroPad(parseInt(col).toString(16), 6);
+		ctx.beginPath();
+		ctx.arc(x, y, q.r, 0, 2*Math.PI); 
+		ctx.closePath();
+		ctx.fill();
+	}
+}
+
+//-----------------------------------------------------------------
+
+var WEATHER_NUM_LIGHTNING = 3;
+
+function Weather() {
+	this.c = 0x22,
+	this.lightning = [];
+	this.t = 0;
+}
+
+Weather.prototype.push = function() {
+	this.t += r(2);
+	this.lightning.push({
+		x: r(w),
+		y: r(h),
+		t: this.t
+	});
+}
+
+Weather.prototype.update = function() {
+	var i = 0;
+	while (i < this.lightning.length) {
+		if (this.lightning[i].t + CLOUD_LIGHTNING_LENGTH < secs) {
+			this.lightning.shift();
+		} else {
+			i++;
+		}
+	}
+	while (this.lightning.length < WEATHER_NUM_LIGHTNING) {
+		this.push();
+	}
+}
+
+
+
+
+
+//-----------------------------------------------------------------
+
+// global state vars that are updated as we go
+//
+var w; // width of canvas
+var h; // height of canvas
+var t; // starting millis
+var m; // millis of current frame
+var c; // canvas
+var ctx; // 2d context
+var secs; // secs passed since start of invitation
+
 $(function(){
-	console.log("invite.js started");
+	c = $("#canvas")[0];
+	ctx = c.getContext('2d'); 
 
-	var c = $("#canvas")[0];
-	var ctx = c.getContext('2d'); 
-
-	var w = 0;
-	var h = 0;	
-	var p = Array();
+	w = 0;
+	h = 0;	
 	
 	// fisheye size
 	var fs = 0;
@@ -72,18 +208,12 @@ $(function(){
 
 	var clickable = false;
 
-	initpoints = function() {	
-		for (var i = 0; i < 1000; i++) {
-			var col = r(0x7f);
-			col = ((col + r(0xf)) << 16) | ((col + r(0xf)) << 8) | (col + r(0xf));
-			p[i] = {
-				x: r(w),
-				y: r(h),
-				r: r(50),
-				c: "#" + zeroPad(parseInt(col).toString(16), 6),
-				dx: rz(10) - 5,
-				dy: rz(10) - 5
-			}
+	var clouds = Array();
+	var weather = new Weather();
+
+	initclouds = function() {
+		for (var i = 0; i < 200; i++) {
+			clouds[i] = new Cloud(ctx, r(w), r(h), 1 + r(2));
 		}
 	};
 	
@@ -99,44 +229,14 @@ $(function(){
 		d = Math.sqrt(qd.x * qd.x + qd.y * qd.y);
 		if (d > fs) return q;
 		if (d < 1) return q; 
-		//th = Math.atan2(qd.y, qd.x);
 		s = Math.pow(fs/d, 2/3);
-		//s *= s;
 		qd.x *= s;
 		qd.y *= s;
 		qd.x += center.x;
 		qd.y += center.y;
 		return qd;
 	};
-	
-	updatepoints = function() {
-		for (var i = 0; i < p.length; i++) {
-		    q = p[i];
-			q.x += q.dx;
-			q.y += q.dy;
-			if (q.x < 0) {
-				q.x = 0;
-				q.dx = rz(5);
-				q.dy = rz(10) - 5;
-			}
-			if (q.x > w) {
-				q.x = w;
-				q.dx = -rz(5);
-				q.dy = rz(10) - 5;
-			}
-			if (q.y < 0) {
-				q.y = 0;
-				q.dx = rz(10) - 5;
-				q.dy = rz(5);
-			}
-			if (q.y > h) {
-				q.y = h + 0;
-				q.dx = rz(10) - 5;
-				q.dy = -rz(5);
-			}
-		}
-	};
-	
+
 	updatesize = function() {
 		if (c.width == window.innerWidth && c.height==window.innerHeight) return;
 		c.width = window.innerWidth;
@@ -147,10 +247,20 @@ $(function(){
 	
 	draw = function() {
 		updatesize();
-		ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+		//ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+		ctx.fillStyle = "#22222a";
 		ctx.fillRect(0,0,w,h);
-		secs = (millis() - t) / 1000;
+		m = millis();
+		secs = (m - t) / 1000;
 		ctx.globalAlpha = 1;
+
+		weather.update();
+
+		for (var i = 0; i < clouds.length; i++) {
+			clouds[i].update();
+			clouds[i].draw(weather);
+		}
+		/*
 		if (secs < 20) {
 			ctx.globalCompositeOperation = "source-over";
 			fs = secs * 100;
@@ -228,12 +338,13 @@ $(function(){
 		}
 		//set final composition mode for buffer swapping
 		ctx.globalCompositeOperation = "source-over";
+		*/
 		setTimeout("draw()", 30);
 	};
 
-	var t = millis();
+	t = millis();
 
 	updatesize();
-	initpoints();
+	initclouds();
 	draw();	
 });
