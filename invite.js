@@ -109,7 +109,6 @@ Cloud.prototype.draw = function(weather) {
 		var p = fisheye.project({x:x,y:y});
 		x = p.x;
 		y = p.y;
-
 		var intensity = 0;
 		for (var j = 0; j < weather.lightning.length; j++) {
 			var l = weather.lightning[j];
@@ -122,6 +121,7 @@ Cloud.prototype.draw = function(weather) {
 			intensity = Math.max(intensity, 1 - (d/(2*CLOUD_LIGHTNING_DIST)) - Math.abs(Math.sin(lt * 10 * Math.PI)/2));
 		}
 		col += (0xff - col) * intensity;
+		col = parseInt(Math.min(0xff, col));
 		col = (col << 16) | (col << 8) | (col);
 		ctx.fillStyle = "#" + zeroPad(parseInt(col).toString(16), 6);
 		ctx.beginPath();
@@ -136,9 +136,18 @@ Cloud.prototype.draw = function(weather) {
 var WEATHER_NUM_LIGHTNING = 3;
 
 function Weather() {
-	this.c = 0x22,
+	this.c = 0,
 	this.lightning = [];
 	this.t = 0;
+	this.num = WEATHER_NUM_LIGHTNING;
+}
+
+Weather.prototype.getSkyColor = function() {
+	var i = this.c / 0xff;
+	var r = parseInt(0x82 * i);
+	var g = parseInt(0xa2 * i);
+	var b = parseInt(0xc6 * i);
+	return "rgb("+r+", "+g+", "+b+")";
 }
 
 Weather.prototype.getColor = function() {
@@ -147,6 +156,14 @@ Weather.prototype.getColor = function() {
 
 Weather.prototype.setColor = function(c) {
 	this.c = c;
+}
+
+Weather.prototype.getNumLightning = function() {
+	return this.num;
+}
+
+Weather.prototype.setNumLightning = function(num) {
+	this.num = num;
 }
 
 Weather.prototype.push = function() {
@@ -167,7 +184,7 @@ Weather.prototype.update = function() {
 			i++;
 		}
 	}
-	while (this.lightning.length < WEATHER_NUM_LIGHTNING) {
+	while (this.lightning.length < parseInt(this.num)) {
 		this.push();
 	}
 }
@@ -275,8 +292,7 @@ $(function(){
 	
 	draw = function() {
 		updatesize();
-		//ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
-		ctx.fillStyle = "#000000";
+		ctx.fillStyle = weather.getSkyColor();
 		ctx.fillRect(0,0,w,h);
 		m = millis();
 		secs = (m - t) / 1000;
@@ -285,8 +301,11 @@ $(function(){
 		weather.update();
 		fisheye.update();
 
-		if (secs < 20) {
-			fisheye.setSize(secs/5);			
+		if (secs > 10 && secs < 20) {
+			var tm = secs - 10;
+			fisheye.setSize(tm/3);			
+			weather.setNumLightning((10 - tm) / 3);
+			weather.setColor(0xff*(tm/10));
 		}
 
 		for (var i = 0; i < clouds.length; i++) {
