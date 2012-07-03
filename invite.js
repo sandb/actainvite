@@ -106,6 +106,9 @@ Cloud.prototype.draw = function(weather) {
 		var col = this.c + weather.c + q.c;
 		var x = this.x + q.x;
 		var y = this.y + q.y;
+		var p = fisheye.project({x:x,y:y});
+		x = p.x;
+		y = p.y;
 
 		var intensity = 0;
 		for (var j = 0; j < weather.lightning.length; j++) {
@@ -116,11 +119,9 @@ Cloud.prototype.draw = function(weather) {
 			var d = dist(x-l.x, y-l.y);
 			if (d > CLOUD_LIGHTNING_DIST) continue;
 			//intensity = Math.max(intensity, 1 - ((d/CLOUD_LIGHTNING_DIST) * (lt/CLOUD_LIGHTNING_LENGTH) * Math.sin(lt * 10 * Math.PI) * (i % 1.8)));
-			console.log(1 - (d/(2*CLOUD_LIGHTNING_DIST)) - (Math.sin(lt * 10 * Math.PI)/2));
-			intensity = Math.max(intensity, 1 - (d/(2*CLOUD_LIGHTNING_DIST)) - (Math.sin(lt * 10 * Math.PI)/2));
+			intensity = Math.max(intensity, 1 - (d/(2*CLOUD_LIGHTNING_DIST)) - Math.abs(Math.sin(lt * 10 * Math.PI)/2));
 		}
 		col += (0xff - col) * intensity;
-
 		col = (col << 16) | (col << 8) | (col);
 		ctx.fillStyle = "#" + zeroPad(parseInt(col).toString(16), 6);
 		ctx.beginPath();
@@ -138,6 +139,14 @@ function Weather() {
 	this.c = 0x22,
 	this.lightning = [];
 	this.t = 0;
+}
+
+Weather.prototype.getColor = function() {
+	return this.c;
+}
+
+Weather.prototype.setColor = function(c) {
+	this.c = c;
 }
 
 Weather.prototype.push = function() {
@@ -164,8 +173,42 @@ Weather.prototype.update = function() {
 }
 
 
+//-----------------------------------------------------------------
 
+function FishEyeLens() {
+	this.s = 0;	
+}
 
+FishEyeLens.prototype.getSize = function() {
+	return this.s;
+}
+
+FishEyeLens.prototype.setSize = function(s) {
+	this.s = s;
+	this.update();
+}
+
+FishEyeLens.prototype.update = function() {
+	this.x = w/2;
+	this.y = h/2;
+	this.r = Math.max(0.1, this.s*(Math.min(w,h)/2));
+}
+
+FishEyeLens.prototype.project = function(p) {
+	pd = {
+		x: p.x - this.x,
+		y: p.y - this.y,
+	};
+	d = dist(pd.x, pd.y);
+	if (d > this.r) return p;
+	if (d < 1) return p; 
+	s = Math.pow(this.r/d, 2/3);
+	pd.x *= s;
+	pd.y *= s;
+	pd.x += this.x;
+	pd.y += this.y;
+	return pd;
+}
 
 //-----------------------------------------------------------------
 
@@ -178,6 +221,7 @@ var m; // millis of current frame
 var c; // canvas
 var ctx; // 2d context
 var secs; // secs passed since start of invitation
+var fisheye;
 
 $(function(){
 	c = $("#canvas")[0];
@@ -191,6 +235,9 @@ $(function(){
 
 	// logo
 	var logo = loadimg("wl.png");
+
+	// lens
+	fisheye = new FishEyeLens();
 
 	// array of pics
 	var pics = Array();
@@ -218,26 +265,6 @@ $(function(){
 		}
 	};
 	
-	fisheye = function(q, center) {
-		qd = {
-			x: q.x - center.x,
-			y: q.y - center.y,
-			r: q.r,
-			c: q.c,
-			xd: q.xd,
-			yd: q.yd,
-		};
-		d = Math.sqrt(qd.x * qd.x + qd.y * qd.y);
-		if (d > fs) return q;
-		if (d < 1) return q; 
-		s = Math.pow(fs/d, 2/3);
-		qd.x *= s;
-		qd.y *= s;
-		qd.x += center.x;
-		qd.y += center.y;
-		return qd;
-	};
-
 	updatesize = function() {
 		if (c.width == window.innerWidth && c.height==window.innerHeight) return;
 		c.width = window.innerWidth;
@@ -249,13 +276,18 @@ $(function(){
 	draw = function() {
 		updatesize();
 		//ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
-		ctx.fillStyle = "#22222a";
+		ctx.fillStyle = "#000000";
 		ctx.fillRect(0,0,w,h);
 		m = millis();
 		secs = (m - t) / 1000;
 		ctx.globalAlpha = 1;
 
 		weather.update();
+		fisheye.update();
+
+		if (secs < 20) {
+			fisheye.setSize(secs/5);			
+		}
 
 		for (var i = 0; i < clouds.length; i++) {
 			clouds[i].update();
