@@ -58,7 +58,7 @@ var CLOUD_SPEED = 20;
 var CLOUD_SIZE = 2;
 var CLOUD_MIN_SIZE = 2;
 var CLOUD_LIGHTNING_LENGTH = 1.2; //secs
-var CLOUD_LIGHTNING_DIST = 300; //pix
+var CLOUD_LIGHTNING_DIST = 150; //pix
 
 function Cloud() {
 	this.rand();
@@ -116,7 +116,8 @@ Cloud.prototype.draw = function(weather) {
 			var d = dist(x-l.x, y-l.y);
 			if (d > CLOUD_LIGHTNING_DIST) continue;
 			//intensity = Math.max(intensity, 1 - ((d/CLOUD_LIGHTNING_DIST) * (lt/CLOUD_LIGHTNING_LENGTH) * Math.sin(lt * 10 * Math.PI) * (i % 1.8)));
-			intensity = Math.max(intensity, 1 - ((d/CLOUD_LIGHTNING_DIST) * Math.sin(lt * 10 * Math.PI) * (i % 1.8)));
+			console.log(1 - (d/(2*CLOUD_LIGHTNING_DIST)) - (Math.sin(lt * 10 * Math.PI)/2));
+			intensity = Math.max(intensity, 1 - (d/(2*CLOUD_LIGHTNING_DIST)) - (Math.sin(lt * 10 * Math.PI)/2));
 		}
 		col += (0xff - col) * intensity;
 
