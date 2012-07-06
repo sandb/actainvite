@@ -42,7 +42,6 @@ function FakeAudio() {
 	};
 }
 
-
 //-----------------------------------------------------------------
 //
 var CLOUD_WIDTH = 40;
@@ -272,8 +271,8 @@ Effects.prototype.fire = function() {
 
 //-----------------------------------------------------------------
 
-function Textor() {
-	this.lines = [];
+function Textor(lines) {
+	this.lines = lines;
 	this.lineSpacing = 1.2;
 	this.total = 0;
 	this.font = "Simpsons1";
@@ -290,24 +289,39 @@ Textor.prototype.add = function(line, size) {
 Textor.prototype.updateTotal = function() {
 	this.total = 0;
 	for (var i = 0; i < this.lines.length; i++) {
-		this.total += this.lines[i].s;
+		this.total += this.lines[i].s * this.lineSpacing;
 	}
 }
 
 Textor.prototype.draw = function() {
+	this.updateTotal();
 	ctx.textAlign = "center";
 	ctx.textBaseline = "top";
 
+	var scalar = h/100;
+
 	var x = w/2;
-	var y = h/2  - this.total/2;
+	var y = h/2  - (scalar * this.total)/2;
 
 	for (var i = 0; i < this.lines.length; i++) {	
 		var l = this.lines[i];
-		var ls = parseInt(h/l.s);
+		var ls = parseInt(scalar * l.s);
 		ctx.font = ls + 'px "' + this.font + '"';
 		ctx.fillText(l.l, x, y);
 		y += this.lineSpacing * ls;
 	};
+}
+
+function TextorEffect(start, end, lines, color) {
+	var tlines = new Textor(lines);
+	return new Effect(start, end, function(t) {
+		var alpha = Math.pow(Math.sin(t*Math.PI),2/3);
+		if (alpha > 1) alpha = 1;			
+		ctx.globalAlpha = alpha;
+		ctx.fillStyle = color;
+		tlines.draw();
+		ctx.globalAlpha = 1;
+	});
 }
 
 //-----------------------------------------------------------------
@@ -341,18 +355,22 @@ $(function(){
 
 	// array of pics
 	var pics = Array();
-	for (var i = 0; i < 15; i++) {
-		pics[i] = loadimg("img/"+i+".jpg");
+	for (var i = 1; i < 15; i++) {
+		pics[i-1] = loadimg("img/"+i+".jpg");
 	}
 
 	//audio
 	if (typeof(Audio) != "undefined") {
-		var aw = new Audio("aw.ogg");	
-		aw.loop = true;
+		var thesimpsons = new Audio("thesimpsons.ogg");	
+		thesimpsons.loop = true;
+		var thunder = new Audio("thunder.ogg");	
+		thunder.loop = false;
 	} else {
-		var aw = new FakeAudio();
+		var thesimpsons = new FakeAudio();
+		var thunder = new FakeAudio();
 	}
-	aw.playing = false;
+	thesimpsons.playing = false;
+	thunder.playing = false;
 
 	var clickable = false;
 
@@ -380,6 +398,17 @@ $(function(){
 		fisheye.update();
 	}));
 
+	var picSpeed = 5;
+	effects.add(new Effect(16, NaN, function(t) {
+		var pic = pics[parseInt(t/picSpeed) % pics.length];
+		var scale = Math.max(w / pic.width, h / pic.height);
+		ctx.globalAlpha = Math.sin(((t / picSpeed) % 1) * Math.PI);
+		var sw = pic.width * scale;
+		var sh = pic.height * scale;
+		ctx.drawImage(pic, (w-sw)/2, (h-sh)/2, sw, sh);
+		ctx.globalAlpha = 1;
+	}));
+
 	effects.add(new Effect(0, NaN, function(t) {
 		for (var i = 0; i < clouds.length; i++) {
 			clouds[i].update();
@@ -387,44 +416,65 @@ $(function(){
 		}
 	}));
 
-// end of piracy -> privacy
-// no more user generated content -> no more content
-// no more internet problems -> no more internet
-// ...
-
-	effects.add(new Effect(10, 20, function(t) {
+	effects.add(new Effect(16, 23, function(t) {
 		fisheye.setSize(t/0.3);			
 		weather.setNumLightning((1 - t) / 0.3);
 		weather.setColor(0xff*t);
 	}));
 
-	var lines1 = new Textor();
-	lines1.add("", 10);
-	lines1.add("slkdjfldskfs", 16);
-	lines1.add("slkdjfds", 20);
+	effects.add(TextorEffect(3, 6, [
+		{l:"After a long war...", s:10},
+	],"#aaaaaa"));
 	
-	effects.add(new Effect(3, 5, function(t) {
-		var alpha = Math.sin(t*Math.PI);
+	effects.add(TextorEffect(6, 9, [
+		{l:"against evil bureaucrats...", s:10},
+	],"#aaaaaa"));
+	
+	effects.add(TextorEffect(9, 12, [
+		{l:"and indifferent,", s:10},
+		{l:"and/or incompetent,", s:10},
+	],"#aaaaaa"));
+
+	effects.add(TextorEffect(12, 15, [
+		{l:"or ju$t plain evil,", s:10},
+		{l:"politicians...", s:10},
+	],"#aaaaaa"));
+	
+	effects.add(TextorEffect(15, 18, [
+		{l:"we can finally,", s:10},
+		{l:"fire up the BBQ...", s:10},
+	],"#aaaaaa"));
+	
+	effects.add(TextorEffect(18, 21, [
+		{l:"and celebrate...", s:10},
+	], "#ffffff"));
+	
+	var eoa = new Textor([
+		{l:"the end of ACTA", s:10},
+		{l:"BBQ at 19:00", s:10},
+		{l:"Tarwestraat 33", s:10},
+		{l:"9000 Gent", s:10},
+	]);
+
+	effects.add(new Effect(21, NaN, function(t) {
+		var alpha = (secs - this.t) / 4;
 		if (alpha > 1) alpha = 1;			
 		ctx.globalAlpha = alpha;
-		ctx.fillStyle = "#664444";
-		lines1.draw();
+		ctx.fillStyle = "#ffffff";
+		eoa.draw();
 		ctx.globalAlpha = 1;
 	}));
 
-	var lines2 = new Textor();
-	lines2.add("ACTA", 10);
-	lines2.add("the end of piracy", 16);
-	
-	effects.add(new Effect(10, NaN, function(t) {
-		var l = 5;
-		var alpha = 1-((l + this.start-secs)/l);
-		if (alpha > 1) alpha = 1;			
-		ctx.globalAlpha = alpha;
-		ctx.globalCompositeOperation = "source-over";
-		ctx.fillStyle = "#ffffff";
-		lines2.draw();
-		ctx.globalAlpha = 1;
+	effects.add(new Effect(0, NaN, function(t) {
+		if (thunder.playing) return;
+		thunder.playing = true;
+		thunder.play();
+	}));
+
+	effects.add(new Effect(13, NaN, function(t) {
+		if (thesimpsons.playing) return;
+		thesimpsons.playing = true;
+		thesimpsons.play();
 	}));
 
 	draw = function() {
@@ -435,66 +485,6 @@ $(function(){
 		secs = (m - t) / 1000;
 		ctx.globalAlpha = 1;
 
-		/*
-		if (secs < 20) {
-			ctx.globalCompositeOperation = "source-over";
-			fs = secs * 100;
-			for (var i = 0; i < p.length; i++) {
-				q = fisheye(p[i], {x:w/2, y:h/2});
-				ctx.fillStyle = q.c;
-				ctx.beginPath();
-				ctx.arc(q.x, q.y, q.r, 0, 2*Math.PI); 
-				ctx.closePath();
-				ctx.fill();
-			}
-			updatepoints();
-		}
-		if (logo.loaded) {
-			ctx.globalCompositeOperation = "xor";
-			var scale = 20 - secs;
-			if (scale < 1) scale = 1;
-			var hw = logo.width * scale / 2;
-			var hh = logo.height * scale / 2;
-			ctx.drawImage(logo, w/2 - hw, h/2 - hh, 2*hw, 2*hh);
-		}
-		if (secs > 20 && !clickable) {
-			clickable = true;
-			$("#canvas").click(function() {
-				window.location="http://0x20.be/FrackFest_is_a_feature";
-			});
-			$("#canvas").css('cursor', 'pointer');
-		}
-		if (secs > 20) {
-			ctx.globalCompositeOperation = "xor";
-			var pic = pics[parseInt(secs/2) % pics.length];
-			var scale = w / pic.width;
-			scale *= 1 + secs % 2;
-			var sw = pic.width * scale;
-			var sh = pic.height * scale;
-			ctx.drawImage(pic, (w-sw)/2, (h-sh)/2, sw, sh);
-		}
-		*/
-		/*
-		if (secs > 30) {
-			ctx.globalCompositeOperation = "source-over";
-			fs = (10 + Math.abs(((secs - 30) % 20) - 10)) * 100;
-			for (var i = 0; i < p.length; i++) {
-				q = fisheye(p[i], {x:w/2, y:h/2});
-				ctx.fillStyle = q.c;
-				ctx.beginPath();
-				ctx.arc(q.x, q.y, q.r, 0, 2*Math.PI); 
-				ctx.closePath();
-				ctx.fill();
-			}
-			updatepoints();
-		}
-		if (secs > 4 && !aw.playing) {
-			aw.playing = true;
-			aw.play();
-		}
-		//set final composition mode for buffer swapping
-		ctx.globalCompositeOperation = "source-over";
-		*/
 		effects.fire();
 		setTimeout("draw()", 30);
 	};
