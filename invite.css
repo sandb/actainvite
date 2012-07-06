@@ -3,6 +3,16 @@
 	src: url('VideoPhreak.ttf');
 }
 
+@font-face {
+	font-family: Simpsons1;
+	src: url('Simpsonfont.ttf');
+}
+
+@font-face {
+	font-family: Simpsons2;
+	src: url('akbar.ttf');
+}
+
 body, html {
 	padding: 0;
 	margin: 0;

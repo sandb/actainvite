@@ -117,7 +117,6 @@ Cloud.prototype.draw = function(weather) {
 			if (lt > CLOUD_LIGHTNING_LENGTH) continue;
 			var d = dist(x-l.x, y-l.y);
 			if (d > CLOUD_LIGHTNING_DIST) continue;
-			//intensity = Math.max(intensity, 1 - ((d/CLOUD_LIGHTNING_DIST) * (lt/CLOUD_LIGHTNING_LENGTH) * Math.sin(lt * 10 * Math.PI) * (i % 1.8)));
 			intensity = Math.max(intensity, 1 - (d/(2*CLOUD_LIGHTNING_DIST)) - Math.abs(Math.sin(lt * 10 * Math.PI)/2));
 		}
 		col += (0xff - col) * intensity;
@@ -229,6 +228,90 @@ FishEyeLens.prototype.project = function(p) {
 
 //-----------------------------------------------------------------
 
+function Effect(start, end, effector) {
+	this.effector = effector;
+	this.start = start;
+	this.t = 0;
+	if (isNaN(end)) {
+		this.execute = this.executeForever;
+	} else {
+		this.execute = this.executeRange;
+		this.end = end;
+		this.length = end - start;
+	}
+}
+
+Effect.prototype.executeForever = function() {
+	if (secs < this.start) return;
+	var t = secs - this.start;
+	this.effector(t);
+}
+
+Effect.prototype.executeRange = function() {
+	if (secs < this.start) return;
+	if (secs > this.end) return;
+	var t = (secs - this.start) / this.length;
+	this.effector(t);
+}
+
+//-----------------------------------------------------------------
+
+function Effects() {
+	this.effects = [];
+}
+
+Effects.prototype.add = function(effect) {
+	this.effects.push(effect);
+}
+
+Effects.prototype.fire = function() {
+	for (var i = 0; i < this.effects.length; i++) {
+		this.effects[i].execute();
+	}
+}
+
+//-----------------------------------------------------------------
+
+function Textor() {
+	this.lines = [];
+	this.lineSpacing = 1.2;
+	this.total = 0;
+	this.font = "Simpsons1";
+}
+
+Textor.prototype.add = function(line, size) {
+	this.lines.push({
+		l: line,
+		s: size
+	});
+	this.updateTotal();
+}
+
+Textor.prototype.updateTotal = function() {
+	this.total = 0;
+	for (var i = 0; i < this.lines.length; i++) {
+		this.total += this.lines[i].s;
+	}
+}
+
+Textor.prototype.draw = function() {
+	ctx.textAlign = "center";
+	ctx.textBaseline = "top";
+
+	var x = w/2;
+	var y = h/2  - this.total/2;
+
+	for (var i = 0; i < this.lines.length; i++) {	
+		var l = this.lines[i];
+		var ls = parseInt(h/l.s);
+		ctx.font = ls + 'px "' + this.font + '"';
+		ctx.fillText(l.l, x, y);
+		y += this.lineSpacing * ls;
+	};
+}
+
+//-----------------------------------------------------------------
+
 // global state vars that are updated as we go
 //
 var w; // width of canvas
@@ -289,7 +372,61 @@ $(function(){
 		w = c.width;
 		h = c.height;
 	};
+
+	var effects = new Effects();
+
+	effects.add(new Effect(0, NaN, function(t) {
+		weather.update();
+		fisheye.update();
+	}));
+
+	effects.add(new Effect(0, NaN, function(t) {
+		for (var i = 0; i < clouds.length; i++) {
+			clouds[i].update();
+			clouds[i].draw(weather);
+		}
+	}));
+
+// end of piracy -> privacy
+// no more user generated content -> no more content
+// no more internet problems -> no more internet
+// ...
+
+	effects.add(new Effect(10, 20, function(t) {
+		fisheye.setSize(t/0.3);			
+		weather.setNumLightning((1 - t) / 0.3);
+		weather.setColor(0xff*t);
+	}));
+
+	var lines1 = new Textor();
+	lines1.add("", 10);
+	lines1.add("slkdjfldskfs", 16);
+	lines1.add("slkdjfds", 20);
 	
+	effects.add(new Effect(3, 5, function(t) {
+		var alpha = Math.sin(t*Math.PI);
+		if (alpha > 1) alpha = 1;			
+		ctx.globalAlpha = alpha;
+		ctx.fillStyle = "#664444";
+		lines1.draw();
+		ctx.globalAlpha = 1;
+	}));
+
+	var lines2 = new Textor();
+	lines2.add("ACTA", 10);
+	lines2.add("the end of piracy", 16);
+	
+	effects.add(new Effect(10, NaN, function(t) {
+		var l = 5;
+		var alpha = 1-((l + this.start-secs)/l);
+		if (alpha > 1) alpha = 1;			
+		ctx.globalAlpha = alpha;
+		ctx.globalCompositeOperation = "source-over";
+		ctx.fillStyle = "#ffffff";
+		lines2.draw();
+		ctx.globalAlpha = 1;
+	}));
+
 	draw = function() {
 		updatesize();
 		ctx.fillStyle = weather.getSkyColor();
@@ -298,20 +435,6 @@ $(function(){
 		secs = (m - t) / 1000;
 		ctx.globalAlpha = 1;
 
-		weather.update();
-		fisheye.update();
-
-		if (secs > 10 && secs < 20) {
-			var tm = secs - 10;
-			fisheye.setSize(tm/3);			
-			weather.setNumLightning((10 - tm) / 3);
-			weather.setColor(0xff*(tm/10));
-		}
-
-		for (var i = 0; i < clouds.length; i++) {
-			clouds[i].update();
-			clouds[i].draw(weather);
-		}
 		/*
 		if (secs < 20) {
 			ctx.globalCompositeOperation = "source-over";
@@ -350,27 +473,8 @@ $(function(){
 			var sh = pic.height * scale;
 			ctx.drawImage(pic, (w-sw)/2, (h-sh)/2, sw, sh);
 		}
-		if (secs > 20) {
-			var alpha = 1-((23-secs)/3);
-			if (alpha > 1) alpha = 1;			
-			ctx.globalAlpha = alpha;
-			ctx.globalCompositeOperation = "source-over";
-			ctx.fillStyle = "#333333";
-			ctx.textAlign = "center";
-			var x = w/2;
-			var y = h/2 + 200;
-			ctx.font='40px "VideoPhreak"';
-			ctx.fillText("That's not a bug, that's a feature!", x, y);
-			y += 40;
-			ctx.font='28px "VideoPhreak"';
-			ctx.fillText("Friday, 29th of June 2012, Whitespace.", x, y);
-			y += 30;
-			ctx.font='22px "VideoPhreak"';
-			ctx.fillText("You *are* invited. Resistance *is* futile.", x, y);
-			y += 24;
-			ctx.font='16px "VideoPhreak"';
-			ctx.fillText("Coded by sandb.", x, y);
-		}
+		*/
+		/*
 		if (secs > 30) {
 			ctx.globalCompositeOperation = "source-over";
 			fs = (10 + Math.abs(((secs - 30) % 20) - 10)) * 100;
@@ -391,6 +495,7 @@ $(function(){
 		//set final composition mode for buffer swapping
 		ctx.globalCompositeOperation = "source-over";
 		*/
+		effects.fire();
 		setTimeout("draw()", 30);
 	};
 
